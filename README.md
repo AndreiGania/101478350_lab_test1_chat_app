@@ -35,6 +35,9 @@ Users can: - Join a room - Leave a room - Chat only inside joined room
 Messages are stored in MongoDB and the last 25 messages load when
 joining a room.
 
+### Room Chat Page
+![Room Chat Page](screenshots/roomchat.png)
+
 ## 3. Private Messaging
 
 -   1-to-1 private chat between users
@@ -42,28 +45,14 @@ joining a room.
 -   Messages stored in MongoDB
 -   Real-time delivery using Socket.io
 
+### Private Chat Page
+![Private Chat Page](screenshots/privatechat.png)
+
 ## 4. Typing Indicator
 
 -   Room typing indicator
 -   Private message typing indicator
 
-------------------------------------------------------------------------
-
-# Database Structure
-
-## User Collection
-
-{ username: String (unique), firstname: String, lastname: String,
-password: String }
-
-## GroupMessage Collection
-
-{ from_user: String, room: String, message: String, date_sent: String }
-
-## PrivateMessage Collection
-
-{ from_user: String, to_user: String, message: String, date_sent: String
-}
 
 ------------------------------------------------------------------------
 
@@ -81,16 +70,3 @@ password: String }
 
 Server runs at: http://localhost:3000
 
-------------------------------------------------------------------------
-
-# Requirements Checklist
-
-✔ GitHub repository created\
-✔ Signup page implemented\
-✔ Login page with localStorage\
-✔ Room join/leave functionality\
-✔ Room-based chat with Socket.io\
-✔ Messages stored in MongoDB\
-✔ Private messaging\
-✔ Typing indicator\
-✔ Logout functionality
