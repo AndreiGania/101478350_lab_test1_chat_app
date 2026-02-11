@@ -52,9 +52,9 @@ app.get("/chat", (req, res) => {
   res.sendFile(path.join(__dirname, "views", "chat.html"));
 });
 
-// --------------------
+
 // APIs
-// --------------------
+
 
 // Signup
 app.post("/api/signup", async (req, res) => {
@@ -102,9 +102,9 @@ app.get("/api/users", async (req, res) => {
   }
 });
 
-// --------------------
+
 // Socket.io
-// --------------------
+
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -116,7 +116,6 @@ const nowStamp = () => new Date().toISOString();
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // Register online user for private messaging delivery
   socket.on("user:online", ({ username }) => {
     if (!username) return;
     socket.data.username = username;
@@ -129,12 +128,11 @@ io.on("connection", (socket) => {
     socket.emit("rooms:list", ROOMS);
   });
 
-  // Join room + load history
   socket.on("room:join", async ({ room, username }) => {
     try {
       if (!ROOMS.includes(room)) return;
 
-      // leave previous room first
+
       if (socket.data.room) socket.leave(socket.data.room);
 
       socket.join(room);
@@ -172,7 +170,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Room message: save to DB + emit to room
+
   socket.on("room:message", async (message) => {
     try {
       const room = socket.data.room;
@@ -184,7 +182,7 @@ io.on("connection", (socket) => {
         from_user: username,
         room,
         message: message.trim(),
-        date_sent: nowStamp(), // ✅ add timestamp
+        date_sent: nowStamp(),
       });
 
       io.to(room).emit("room:message", saved);
@@ -193,7 +191,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Room typing indicator
+
   socket.on("typing", () => {
     const room = socket.data.room;
     const username = socket.data.username;
@@ -202,9 +200,9 @@ io.on("connection", (socket) => {
     }
   });
 
-  // -------------------------
+
   // Private chat
-  // -------------------------
+
   socket.on("pm:open", async ({ to_user }) => {
     try {
       const from_user = socket.data.username;
@@ -235,7 +233,7 @@ io.on("connection", (socket) => {
         from_user,
         to_user,
         message: message.trim(),
-        date_sent: nowStamp(), // ✅ add timestamp
+        date_sent: nowStamp(),
       });
 
       const senderSockets = onlineUsers.get(from_user) || new Set();
@@ -248,7 +246,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Typing indicator for private chat
   socket.on("pm:typing", ({ to_user }) => {
     const from_user = socket.data.username;
     if (!from_user || !to_user) return;
