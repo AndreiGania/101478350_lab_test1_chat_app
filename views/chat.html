@@ -295,7 +295,7 @@ messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendMessage();
 });
 
-/* ✅ FIX: room typing indicator display */
+
 messageInput.addEventListener("input", () => {
   if (!currentRoom) return;
   socket.emit("typing");
