@@ -26,11 +26,6 @@ body.discord-dark {
   font-family: "Segoe UI", sans-serif;
 }
 
-.card {
-  background: var(--channel);
-  border: none;
-}
-
 .sidebar {
   background: var(--sidebar);
   border-right: 1px solid var(--border);
@@ -78,12 +73,7 @@ body.discord-dark {
   border: 1px solid var(--accent);
 }
 
-.btn-primary {
-  background: var(--accent);
-  border: none;
-}
-
-.btn-success {
+.btn-primary, .btn-success {
   background: var(--accent);
   border: none;
 }
@@ -180,14 +170,11 @@ body.discord-dark {
           </div>
         </div>
 
-
         <div id="pmChatSection" style="display:none;">
           <div class="small mt-2">Chatting with:</div>
           <div id="pmWithModal" class="fw-bold mb-2">None</div>
 
-          <div id="pmMessagesModal"
-               style="height:260px; overflow-y:auto; padding:10px;">
-          </div>
+          <div id="pmMessagesModal" style="height:260px; overflow-y:auto; padding:10px;"></div>
 
           <div id="pmTypingModal" class="small mt-1"></div>
 
@@ -209,7 +196,6 @@ body.discord-dark {
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-
 const session = localStorage.getItem("sessionUser");
 if (!session) window.location.href = "/";
 const user = JSON.parse(session);
@@ -253,9 +239,12 @@ joinBtn.addEventListener("click", () => {
   socket.emit("room:join", { room, username: user.username });
   currentRoom = room;
   currentRoomEl.textContent = room;
+
   messageInput.disabled = false;
   sendBtn.disabled = false;
+
   messagesEl.innerHTML = "";
+  addLine(`<div class="sys">Joined room: <b>${room}</b></div>`);
 });
 
 leaveBtn.addEventListener("click", () => {
@@ -265,10 +254,27 @@ leaveBtn.addEventListener("click", () => {
   messageInput.disabled = true;
   sendBtn.disabled = true;
   typingEl.textContent = "";
+  addLine(`<div class="sys">You left the room.</div>`);
 });
 
+
+socket.on("room:history", (history) => {
+  messagesEl.innerHTML = "";
+  history.forEach(m => {
+    addLine(`<div><b>${m.from_user}:</b> ${m.message}
+      <span class="text-muted small">(${m.date_sent || ""})</span></div>`);
+  });
+});
+
+
+socket.on("room:system", (data) => {
+  addLine(`<div class="sys">${data.message}</div>`);
+});
+
+/* Room live messages */
 socket.on("room:message", (m) => {
-  addLine(`<div><b>${m.from_user}:</b> ${m.message}</div>`);
+  addLine(`<div><b>${m.from_user}:</b> ${m.message}
+    <span class="text-muted small">(${m.date_sent || ""})</span></div>`);
 });
 
 function sendMessage() {
@@ -283,6 +289,23 @@ messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendMessage();
 });
 
+/* ✅ FIX: room typing indicator display */
+messageInput.addEventListener("input", () => {
+  if (!currentRoom) return;
+  socket.emit("typing");
+
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => { typingEl.textContent = ""; }, 700);
+});
+
+socket.on("typing", (text) => {
+  typingEl.textContent = text;
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => { typingEl.textContent = ""; }, 700);
+});
+
+
+// PRIVATE CHAT
 
 const pmUserSelect = document.getElementById("pmUserSelectModal");
 const pmOpenBtn = document.getElementById("pmOpenBtnModal");
@@ -323,7 +346,6 @@ async function loadUsers() {
   } catch (_) {}
 }
 
-
 document.getElementById("openPmBtn").addEventListener("click", () => {
   loadUsers();
 
@@ -360,7 +382,8 @@ socket.on("pm:history", ({ with_user, messages }) => {
   pmMessagesEl.innerHTML = "";
   messages.forEach(m => {
     const who = (m.from_user === user.username) ? "You" : m.from_user;
-    pmAddLine(`<div><b>${who}:</b> ${m.message} <span class="text-muted small">(${m.date_sent})</span></div>`);
+    pmAddLine(`<div><b>${who}:</b> ${m.message}
+      <span class="text-muted small">(${m.date_sent || ""})</span></div>`);
   });
 });
 
@@ -385,9 +408,9 @@ socket.on("pm:message", (m) => {
   if (!relevant) return;
 
   const who = (m.from_user === user.username) ? "You" : m.from_user;
-  pmAddLine(`<div><b>${who}:</b> ${m.message} <span class="text-muted small">(${m.date_sent})</span></div>`);
+  pmAddLine(`<div><b>${who}:</b> ${m.message}
+    <span class="text-muted small">(${m.date_sent || ""})</span></div>`);
 });
-
 
 pmInput.addEventListener("input", () => {
   if (!currentPMUser) return;
@@ -406,7 +429,6 @@ socket.on("pm:typing", ({ from_user }) => {
   pmTypingTimer = setTimeout(() => { pmTypingEl.textContent = ""; }, 700);
 });
 
-/* reset when modal closes */
 pmModal.addEventListener("hidden.bs.modal", () => {
   pmChatSection.style.display = "none";
   pmWithEl.textContent = "None";

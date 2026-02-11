@@ -16,7 +16,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static("public"));
 
-
 const MONGODB_URI =
   process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/comp3133_chatapp";
 
@@ -29,7 +28,6 @@ mongoose.connection.on("error", (err) =>
 mongoose.connection.on("disconnected", () =>
   console.log("MongoDB disconnected")
 );
-
 
 mongoose.set("bufferCommands", false);
 
@@ -54,9 +52,9 @@ app.get("/chat", (req, res) => {
   res.sendFile(path.join(__dirname, "views", "chat.html"));
 });
 
-
+// --------------------
 // APIs
-
+// --------------------
 
 // Signup
 app.post("/api/signup", async (req, res) => {
@@ -64,7 +62,11 @@ app.post("/api/signup", async (req, res) => {
     const { username, firstname, lastname, password } = req.body;
 
     const user = await User.create({ username, firstname, lastname, password });
-    res.json({ ok: true, user: { username: user.username, firstname: user.firstname, lastname: user.lastname } });
+
+    res.json({
+      ok: true,
+      user: { username: user.username, firstname: user.firstname, lastname: user.lastname },
+    });
   } catch (e) {
     if (e.code === 11000) {
       return res.status(400).json({ ok: false, message: "Username already exists" });
@@ -81,7 +83,10 @@ app.post("/api/login", async (req, res) => {
     const user = await User.findOne({ username, password });
     if (!user) return res.status(401).json({ ok: false, message: "Invalid credentials" });
 
-    res.json({ ok: true, user: { username: user.username, firstname: user.firstname, lastname: user.lastname } });
+    res.json({
+      ok: true,
+      user: { username: user.username, firstname: user.firstname, lastname: user.lastname },
+    });
   } catch (e) {
     res.status(500).json({ ok: false, message: e.message });
   }
@@ -97,19 +102,21 @@ app.get("/api/users", async (req, res) => {
   }
 });
 
-
+// --------------------
 // Socket.io
+// --------------------
 const server = http.createServer(app);
 const io = new Server(server);
 
 const ROOMS = ["devops", "cloud computing", "covid19", "sports", "nodeJS"];
-
 const onlineUsers = new Map();
+
+const nowStamp = () => new Date().toISOString();
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-
+  // Register online user for private messaging delivery
   socket.on("user:online", ({ username }) => {
     if (!username) return;
     socket.data.username = username;
@@ -122,22 +129,36 @@ io.on("connection", (socket) => {
     socket.emit("rooms:list", ROOMS);
   });
 
+  // Join room + load history
   socket.on("room:join", async ({ room, username }) => {
-    if (!ROOMS.includes(room)) return;
+    try {
+      if (!ROOMS.includes(room)) return;
 
-    socket.join(room);
-    socket.data.room = room;
+      // leave previous room first
+      if (socket.data.room) socket.leave(socket.data.room);
 
-    if (username && !socket.data.username) {
-      socket.data.username = username;
-      if (!onlineUsers.has(username)) onlineUsers.set(username, new Set());
-      onlineUsers.get(username).add(socket.id);
+      socket.join(room);
+      socket.data.room = room;
+
+      if (username && !socket.data.username) {
+        socket.data.username = username;
+        if (!onlineUsers.has(username)) onlineUsers.set(username, new Set());
+        onlineUsers.get(username).add(socket.id);
+      }
+
+      const history = await GroupMessage.find({ room })
+        .sort({ _id: -1 })
+        .limit(25);
+
+      socket.emit("room:history", history.reverse());
+
+      io.to(room).emit("room:system", {
+        message: `${socket.data.username || "User"} joined ${room}`,
+      });
+    } catch (err) {
+      console.error("room:join error:", err.message);
+      socket.emit("room:history", []);
     }
-
-    const history = await GroupMessage.find({ room }).sort({ _id: -1 }).limit(25);
-    socket.emit("room:history", history.reverse());
-
-    io.to(room).emit("room:system", { message: `${socket.data.username || "User"} joined ${room}` });
   });
 
   socket.on("room:leave", () => {
@@ -151,19 +172,25 @@ io.on("connection", (socket) => {
     }
   });
 
-
+  // Room message: save to DB + emit to room
   socket.on("room:message", async (message) => {
-    const room = socket.data.room;
-    const username = socket.data.username;
-    if (!room || !username || !message?.trim()) return;
+    try {
+      const room = socket.data.room;
+      const username = socket.data.username;
 
-    const saved = await GroupMessage.create({
-      from_user: username,
-      room,
-      message: message.trim(),
-    });
+      if (!room || !username || !message?.trim()) return;
 
-    io.to(room).emit("room:message", saved);
+      const saved = await GroupMessage.create({
+        from_user: username,
+        room,
+        message: message.trim(),
+        date_sent: nowStamp(), // ✅ add timestamp
+      });
+
+      io.to(room).emit("room:message", saved);
+    } catch (err) {
+      console.error("room:message error:", err.message);
+    }
   });
 
   // Room typing indicator
@@ -175,43 +202,53 @@ io.on("connection", (socket) => {
     }
   });
 
-
-  // Private Chat 
+  // -------------------------
+  // Private chat
+  // -------------------------
   socket.on("pm:open", async ({ to_user }) => {
-    const from_user = socket.data.username;
-    if (!from_user || !to_user) return;
+    try {
+      const from_user = socket.data.username;
+      if (!from_user || !to_user) return;
 
-    const history = await PrivateMessage.find({
-      $or: [
-        { from_user, to_user },
-        { from_user: to_user, to_user: from_user },
-      ],
-    })
-      .sort({ _id: -1 })
-      .limit(30);
+      const history = await PrivateMessage.find({
+        $or: [
+          { from_user, to_user },
+          { from_user: to_user, to_user: from_user },
+        ],
+      })
+        .sort({ _id: -1 })
+        .limit(30);
 
-    socket.emit("pm:history", { with_user: to_user, messages: history.reverse() });
+      socket.emit("pm:history", { with_user: to_user, messages: history.reverse() });
+    } catch (err) {
+      console.error("pm:open error:", err.message);
+      socket.emit("pm:history", { with_user: to_user, messages: [] });
+    }
   });
 
   socket.on("pm:send", async ({ to_user, message }) => {
-    const from_user = socket.data.username;
-    if (!from_user || !to_user || !message?.trim()) return;
+    try {
+      const from_user = socket.data.username;
+      if (!from_user || !to_user || !message?.trim()) return;
 
-    const saved = await PrivateMessage.create({
-      from_user,
-      to_user,
-      message: message.trim(),
-    });
+      const saved = await PrivateMessage.create({
+        from_user,
+        to_user,
+        message: message.trim(),
+        date_sent: nowStamp(), // ✅ add timestamp
+      });
 
+      const senderSockets = onlineUsers.get(from_user) || new Set();
+      senderSockets.forEach((sid) => io.to(sid).emit("pm:message", saved));
 
-    const senderSockets = onlineUsers.get(from_user) || new Set();
-    senderSockets.forEach((sid) => io.to(sid).emit("pm:message", saved));
-
-    const receiverSockets = onlineUsers.get(to_user) || new Set();
-    receiverSockets.forEach((sid) => io.to(sid).emit("pm:message", saved));
+      const receiverSockets = onlineUsers.get(to_user) || new Set();
+      receiverSockets.forEach((sid) => io.to(sid).emit("pm:message", saved));
+    } catch (err) {
+      console.error("pm:send error:", err.message);
+    }
   });
 
-  // Typing indicator for privatechat
+  // Typing indicator for private chat
   socket.on("pm:typing", ({ to_user }) => {
     const from_user = socket.data.username;
     if (!from_user || !to_user) return;
@@ -229,8 +266,6 @@ io.on("connection", (socket) => {
     console.log("User disconnected:", socket.id);
   });
 });
-
-
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
