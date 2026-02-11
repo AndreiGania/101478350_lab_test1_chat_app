@@ -2,27 +2,11 @@
 
 ## Student Information
 
--   **Name:** Your Name Here\
--   **Student ID:** Your Student ID Here\
--   **Course:** COMP3133\
--   **Lab Test:** Lab Test 1\
+-   **Name:** Andrei Jhoseph Gania
+-   **Student ID:** 101478350
+-   **Course:** COMP3133
+-   **Lab Test:** Lab Test 1
 -   **Repository Name:** studentID_lab_test1_chat_app
-
-------------------------------------------------------------------------
-
-# Real-Time Chat Application
-
-This project is a full-stack real-time chat application built using:
-
--   Node.js
--   Express.js
--   MongoDB (Mongoose)
--   Socket.io
--   Bootstrap 5
--   LocalStorage (for session management)
-
-The application supports user authentication, room-based chat, private
-messaging, and typing indicators.
 
 ------------------------------------------------------------------------
 
@@ -35,6 +19,12 @@ messaging, and typing indicators.
 -   User data stored in MongoDB
 -   Session maintained using localStorage
 -   Logout functionality implemented
+
+### Login Page
+![Login Page](screenshots/Screenshot 2026-02-11 182431.png)
+
+### Signup Page
+![Signup Page](screenshots/Screenshot 2026-02-11 182439.png)
 
 ## 2. Room-Based Chat
 
@@ -93,16 +83,6 @@ Server runs at: http://localhost:3000
 
 ------------------------------------------------------------------------
 
-# Project Structure
-
-models/ User.js GroupMessage.js PrivateMessage.js
-
-views/ login.html signup.html chat.html
-
-server.js package.json README.md
-
-------------------------------------------------------------------------
-
 # Requirements Checklist
 
 ✔ GitHub repository created\
@@ -114,11 +94,3 @@ server.js package.json README.md
 ✔ Private messaging\
 ✔ Typing indicator\
 ✔ Logout functionality
-
-------------------------------------------------------------------------
-
-# Conclusion
-
-This project demonstrates real-time communication using Socket.io
-integrated with a MongoDB backend, fulfilling all Lab Test 1
-requirements.
