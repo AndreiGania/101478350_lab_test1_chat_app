@@ -21,10 +21,10 @@
 -   Logout functionality implemented
 
 ### Login Page
-![Login Page](screenshots/Screenshot 2026-02-11 182431.png)
+![Login Page](screenshots/login.png)
 
 ### Signup Page
-![Signup Page](screenshots/Screenshot 2026-02-11 182439.png)
+![Signup Page](screenshots/signup.png)
 
 ## 2. Room-Based Chat
 
