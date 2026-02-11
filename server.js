@@ -211,7 +211,7 @@ io.on("connection", (socket) => {
     receiverSockets.forEach((sid) => io.to(sid).emit("pm:message", saved));
   });
 
-  // Typing indicator for 1-to-1 chat
+  // Typing indicator for privatechat
   socket.on("pm:typing", ({ to_user }) => {
     const from_user = socket.data.username;
     if (!from_user || !to_user) return;
