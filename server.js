@@ -20,27 +20,24 @@ app.use(express.static("public"));
 const MONGODB_URI =
   process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/comp3133_chatapp";
 
-// Helpful logs for debugging
 mongoose.connection.on("connected", () =>
   console.log("MongoDB connected:", MONGODB_URI)
 );
 mongoose.connection.on("error", (err) =>
-  console.log("ongoDB connection error:", err.message)
+  console.log("MongoDB connection error:", err.message)
 );
 mongoose.connection.on("disconnected", () =>
   console.log("MongoDB disconnected")
 );
 
-// If Mongo is down, don't buffer forever
+
 mongoose.set("bufferCommands", false);
 
 (async () => {
   try {
-    await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 8000, // fail fast (8s)
-    });
+    await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 8000 });
   } catch (err) {
-    console.log("❌ FAILED to connect to MongoDB:", err.message);
+    console.log("Failed to connect to MongoDB:", err.message);
     console.log(
       "Fix: Start MongoDB service (local) OR set MONGODB_URI in .env (Atlas) + whitelist your IP."
     );
@@ -50,65 +47,76 @@ mongoose.set("bufferCommands", false);
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "views", "login.html"));
 });
-
 app.get("/signup", (req, res) => {
   res.sendFile(path.join(__dirname, "views", "signup.html"));
 });
-
 app.get("/chat", (req, res) => {
   res.sendFile(path.join(__dirname, "views", "chat.html"));
 });
 
 
+// APIs
+
+
+// Signup
 app.post("/api/signup", async (req, res) => {
   try {
     const { username, firstname, lastname, password } = req.body;
 
-    const user = await User.create({
-      username,
-      firstname,
-      lastname,
-      password,
-    });
-
-    res.json({ ok: true, user });
+    const user = await User.create({ username, firstname, lastname, password });
+    res.json({ ok: true, user: { username: user.username, firstname: user.firstname, lastname: user.lastname } });
   } catch (e) {
     if (e.code === 11000) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "Username already exists" });
+      return res.status(400).json({ ok: false, message: "Username already exists" });
     }
     res.status(400).json({ ok: false, message: e.message });
   }
 });
 
-
+// Login
 app.post("/api/login", async (req, res) => {
   try {
     const { username, password } = req.body;
 
     const user = await User.findOne({ username, password });
+    if (!user) return res.status(401).json({ ok: false, message: "Invalid credentials" });
 
-    if (!user) {
-      return res
-        .status(401)
-        .json({ ok: false, message: "Invalid credentials" });
-    }
-
-    res.json({ ok: true, user });
+    res.json({ ok: true, user: { username: user.username, firstname: user.firstname, lastname: user.lastname } });
   } catch (e) {
     res.status(500).json({ ok: false, message: e.message });
   }
 });
 
+// List users
+app.get("/api/users", async (req, res) => {
+  try {
+    const users = await User.find({}, { username: 1, _id: 0 }).sort({ username: 1 });
+    res.json({ ok: true, users });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: e.message });
+  }
+});
+
+
+// Socket.io
 const server = http.createServer(app);
 const io = new Server(server);
 
-
 const ROOMS = ["devops", "cloud computing", "covid19", "sports", "nodeJS"];
+
+const onlineUsers = new Map();
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
+
+
+  socket.on("user:online", ({ username }) => {
+    if (!username) return;
+    socket.data.username = username;
+
+    if (!onlineUsers.has(username)) onlineUsers.set(username, new Set());
+    onlineUsers.get(username).add(socket.id);
+  });
 
   socket.on("rooms:list", () => {
     socket.emit("rooms:list", ROOMS);
@@ -118,19 +126,18 @@ io.on("connection", (socket) => {
     if (!ROOMS.includes(room)) return;
 
     socket.join(room);
-    socket.data.username = username;
     socket.data.room = room;
 
+    if (username && !socket.data.username) {
+      socket.data.username = username;
+      if (!onlineUsers.has(username)) onlineUsers.set(username, new Set());
+      onlineUsers.get(username).add(socket.id);
+    }
 
-    const history = await GroupMessage.find({ room })
-      .sort({ _id: -1 })
-      .limit(25);
-
+    const history = await GroupMessage.find({ room }).sort({ _id: -1 }).limit(25);
     socket.emit("room:history", history.reverse());
 
-    io.to(room).emit("room:system", {
-      message: `${username} joined ${room}`,
-    });
+    io.to(room).emit("room:system", { message: `${socket.data.username || "User"} joined ${room}` });
   });
 
   socket.on("room:leave", () => {
@@ -139,45 +146,93 @@ io.on("connection", (socket) => {
 
     if (room) {
       socket.leave(room);
-      io.to(room).emit("room:system", {
-        message: `${username} left ${room}`,
-      });
+      io.to(room).emit("room:system", { message: `${username || "User"} left ${room}` });
       socket.data.room = null;
     }
   });
 
+
   socket.on("room:message", async (message) => {
     const room = socket.data.room;
     const username = socket.data.username;
+    if (!room || !username || !message?.trim()) return;
 
-    if (!room || !username) return;
-
-    const newMessage = await GroupMessage.create({
+    const saved = await GroupMessage.create({
       from_user: username,
       room,
-      message,
+      message: message.trim(),
     });
 
-    io.to(room).emit("room:message", newMessage);
+    io.to(room).emit("room:message", saved);
   });
 
+  // Room typing indicator
   socket.on("typing", () => {
     const room = socket.data.room;
     const username = socket.data.username;
-
     if (room && username) {
       socket.to(room).emit("typing", `${username} is typing...`);
     }
   });
 
+
+  // Private Chat 
+  socket.on("pm:open", async ({ to_user }) => {
+    const from_user = socket.data.username;
+    if (!from_user || !to_user) return;
+
+    const history = await PrivateMessage.find({
+      $or: [
+        { from_user, to_user },
+        { from_user: to_user, to_user: from_user },
+      ],
+    })
+      .sort({ _id: -1 })
+      .limit(30);
+
+    socket.emit("pm:history", { with_user: to_user, messages: history.reverse() });
+  });
+
+  socket.on("pm:send", async ({ to_user, message }) => {
+    const from_user = socket.data.username;
+    if (!from_user || !to_user || !message?.trim()) return;
+
+    const saved = await PrivateMessage.create({
+      from_user,
+      to_user,
+      message: message.trim(),
+    });
+
+
+    const senderSockets = onlineUsers.get(from_user) || new Set();
+    senderSockets.forEach((sid) => io.to(sid).emit("pm:message", saved));
+
+    const receiverSockets = onlineUsers.get(to_user) || new Set();
+    receiverSockets.forEach((sid) => io.to(sid).emit("pm:message", saved));
+  });
+
+  // Typing indicator for 1-to-1 chat
+  socket.on("pm:typing", ({ to_user }) => {
+    const from_user = socket.data.username;
+    if (!from_user || !to_user) return;
+
+    const receiverSockets = onlineUsers.get(to_user) || new Set();
+    receiverSockets.forEach((sid) => io.to(sid).emit("pm:typing", { from_user }));
+  });
+
   socket.on("disconnect", () => {
+    const username = socket.data.username;
+    if (username && onlineUsers.has(username)) {
+      onlineUsers.get(username).delete(socket.id);
+      if (onlineUsers.get(username).size === 0) onlineUsers.delete(username);
+    }
     console.log("User disconnected:", socket.id);
   });
 });
 
-const PORT = process.env.PORT || 3000;
 
+
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
-
