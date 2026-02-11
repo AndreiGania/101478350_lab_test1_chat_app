@@ -26,21 +26,24 @@ body.discord-dark {
   font-family: "Segoe UI", sans-serif;
 }
 
+.app-height {
+  height: calc(100vh - 80px);
+}
+
 .sidebar {
   background: var(--sidebar);
   border-right: 1px solid var(--border);
   padding: 15px;
-  height: 500px;
+  height: 100%;
 }
 
 .chat-area {
   background: var(--channel);
   padding: 15px;
-  height: 500px;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
-
 #messages {
   flex: 1;
   overflow-y: auto;
@@ -107,7 +110,10 @@ body.discord-dark {
 
 <body class="discord-dark">
 
-<div class="container-fluid mt-3">
+<div class="container-fluid d-flex justify-content-center align-items-center min-vh-100">
+    <div style="width:98%; max-width:1800px; height:92vh;">
+
+
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="m-0">Chat App</h4>
     <div class="d-flex gap-2">
